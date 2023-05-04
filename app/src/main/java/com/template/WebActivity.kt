@@ -13,22 +13,18 @@ class WebActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_web)
-
         webview = findViewById(R.id.web_view)
 
-        // получаем адрес подписки из настроек приложения
-        val url = getPreferences(Context.MODE_PRIVATE).getString("domain", "")
+        val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+        val url = sharedPreferences.getString("domain", "")
 
-        // если адрес отсутствует или пустой, завершаем активити
         if (url.isNullOrEmpty()) {
             finish()
         } else {
-            // настройка параметров WebView
             webview.settings.javaScriptEnabled = true
             webview.settings.domStorageEnabled = true
             CookieManager.getInstance().setAcceptCookie(true)
 
-            // настройка WebViewClient для перехвата переходов по ссылкам
             webview.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                     if (url != null) {
@@ -38,17 +34,22 @@ class WebActivity : AppCompatActivity() {
                 }
             }
 
-            // загрузка страницы подписки
             webview.loadUrl(url)
         }
     }
 
-    // переопределение обработки кнопки "назад" для WebView
     override fun onBackPressed() {
         if (webview.canGoBack()) {
             webview.goBack()
         } else {
             super.onBackPressed()
         }
+    }
+
+    private fun saveDomainToSharedPreferences(domain: String) {
+        val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        editor.putString("domain", domain)
+        editor.commit() // добавляем эту строку
     }
 }
