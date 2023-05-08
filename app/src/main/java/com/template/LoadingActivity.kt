@@ -2,18 +2,23 @@ package com.template
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Bundle
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import org.json.JSONObject
+import java.util.UUID
 
 class LoadingActivity : AppCompatActivity() {
 
+
     private lateinit var progressBar: ProgressBar
+    var finalUrl : String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,87 +26,86 @@ class LoadingActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
 
         val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+        val firstLaunch = sharedPreferences.getBoolean("app_first_launch", true)
         val sharedPreferencesFirebaseUrl = sharedPreferences.getString("firebase_url", "")
 
-        val editor = sharedPreferences.edit()
+        if (isNetworkAvailable()) {
+            if (firstLaunch) {
+                val editor = sharedPreferences.edit()
 
-        if (sharedPreferences.getBoolean("app_opened", false)) {
-            editor.putBoolean("app_opened", true)
-            editor.apply()
-            if (sharedPreferencesFirebaseUrl.isNullOrEmpty()) {
-                val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
-                val configSettings = FirebaseRemoteConfigSettings.Builder()
-                    .setMinimumFetchIntervalInSeconds(0)
-                    .build()
-                remoteConfig.setConfigSettingsAsync(configSettings)
-                val resourceId = resources.getIdentifier("google_services", "raw", packageName)
-                val localJson =
-                    resources.openRawResource(resourceId).bufferedReader().use { it.readText() }
-                val localData = JSONObject(localJson)
-                val projectInfo = localData.getJSONObject("project_info")
-                val firebaseUrl = projectInfo.getString("firebase_url")
-                remoteConfig.setDefaultsAsync(jsonToMap(localData))
-                editor.putString("firebase_url", firebaseUrl)
-                editor.apply()
-                // Toast.makeText(this, firebaseUrl, Toast.LENGTH_SHORT).show()
                 if (sharedPreferencesFirebaseUrl.isNullOrEmpty()) {
-                    openMainActivity()
-                    Toast.makeText(this, "линки небыло 1 запуск", Toast.LENGTH_SHORT).show()
+                    val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
+                    val configSettings = FirebaseRemoteConfigSettings.Builder()
+                        .setMinimumFetchIntervalInSeconds(0)
+                        .build()
+                    remoteConfig.setConfigSettingsAsync(configSettings)
+                    val resourceId = resources.getIdentifier("google_services", "raw", packageName)
+                    val localJson =
+                        resources.openRawResource(resourceId).bufferedReader().use { it.readText() }
+                    val localData = JSONObject(localJson)
+                    val projectInfo = localData.getJSONObject("project_info")
+                    val firebaseUrl = projectInfo.getString("firebase_url")
+                    remoteConfig.setDefaultsAsync(jsonToMap(localData))
+                    editor.putString("firebase_url", firebaseUrl)
+                    editor.apply()
+                    val packageName = applicationContext.packageName
+                    val userId = UUID.randomUUID().toString()
+                    val timeZone = java.util.TimeZone.getDefault().id
+                    val utmParameters = "utm_source=google-play&amp;utm_medium=organic"
 
+                    finalUrl = "$firebaseUrl/?packageid=$packageName&userId=$userId&getz=$timeZone&$utmParameters"
+
+                    if (sharedPreferences.getString("firebase_url", "").isNullOrEmpty()) {
+                        openMainActivity()
+                        Toast.makeText(this, "линки небыло 1 запуск", Toast.LENGTH_SHORT).show()
+
+                    } else {
+                       // sharedPreferences.getString("firebase_url", "")?.let { openWebActivity(it) }
+                        openWebActivity(firebaseUrl)
+                        Toast.makeText(
+                            this,
+                            "линка была, 1 запуск, открыли вебактивити",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                    }
                 } else {
-                    //openWebActivity(firebaseUrl)
-                    Toast.makeText(
-                        this,
-                        "линка появилась 1 запуск, открыли вебактивити",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    openWebActivity(sharedPreferencesFirebaseUrl)
+                    Toast.makeText(this, "1 запуск, линк", Toast.LENGTH_SHORT).show()
 
                 }
-                //   "firebase_url": "https://test-apk-1-fa3be-default-rtdb.firebaseio.com"
-            } else {
-                //   openWebActivity(firebaseUrl)
-                Toast.makeText(this, "линка была, открываем вебактивити", Toast.LENGTH_SHORT).show()
+                editor.putBoolean("app_first_launch", false)
+                editor.apply()
 
+                //если 2 запуск
+            } else {
+                if (sharedPreferencesFirebaseUrl.isNullOrEmpty()) {
+                    openMainActivity()
+                    Toast.makeText(
+                        this,
+                        "2 запуск, линки небыло, открываем мэйн",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                } else {
+                    openWebActivity(sharedPreferencesFirebaseUrl)
+                    Toast.makeText(
+                        this,
+                        "2 запуск линка была, открываем веб",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         } else {
-            editor.putBoolean("app_opened", true)
-            editor.apply()
-            if (sharedPreferencesFirebaseUrl != null) {
-                //   openWebActivity(sharedPreferencesFirebaseUrl)
-                Toast.makeText(
-                    this,
-                    "2 запуск, линка есть, открываем вебактивити",
-                    Toast.LENGTH_LONG
-                ).show()
-
-            } else {
-                Toast.makeText(
-                    this,
-                    "2 запуск, линки небыло, открываем мэйн",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            openMainActivity()
+            Toast.makeText(
+                this,
+                "Нет подключения к интернету, открываем мэйн, флаг app_first_launch не меняем",
+                Toast.LENGTH_LONG
+            ).show()
         }
-    }
-    /*
-          val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
-          val configSettings = FirebaseRemoteConfigSettings.Builder()
-              .setMinimumFetchIntervalInSeconds(0)
-              .build()
-          remoteConfig.setConfigSettingsAsync(configSettings)
-          val resourceId = resources.getIdentifier("google_services", "raw", packageName)
-          val localJson = resources.openRawResource(resourceId).bufferedReader().use { it.readText() }
-          val localData = JSONObject(localJson)
-          val projectInfo = localData.getJSONObject("project_info")
-          val firebaseUrl = projectInfo.getString("firebase_url")
-          remoteConfig.setDefaultsAsync(jsonToMap(localData))
-              if (firebaseUrl.isNullOrEmpty()) {
-                  openMainActivity()
-              } else {
-                  openWebActivity(firebaseUrl)
-              }
-  */
 
+    }
 
     private fun openMainActivity() {
         val intent = Intent(this, MainActivity::class.java)
@@ -109,9 +113,9 @@ class LoadingActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun openWebActivity(url: String) {
+    private fun openWebActivity(finalUrl : String) {
         val intent = Intent(this, WebActivity::class.java)
-        intent.putExtra("url", url)
+        intent.putExtra("url", finalUrl)
         startActivity(intent)
         finish()
     }
@@ -129,4 +133,27 @@ class LoadingActivity : AppCompatActivity() {
         }
         return map
     }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager =
+            this.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val capabilities =
+                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+                    ?: return false
+            return when {
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+                else -> false
+            }
+        } else {
+            if (connectivityManager.activeNetworkInfo != null && connectivityManager.activeNetworkInfo!!.isConnectedOrConnecting) {
+                return true
+            }
+        }
+        return false
+    }
+
+
 }
